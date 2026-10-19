@@ -28,8 +28,8 @@ import (
 	"go.woodpecker-ci.org/woodpecker/v3/version"
 )
 
-// Restart a pipeline by creating a new one out of the old and start it.
-func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipeline, user *model.User, repo *model.Repo, envs map[string]string) (*model.Pipeline, error) {
+// Restart a pipeline by creating a new one out of the old and start it; opts can limit it to some workflows.
+func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipeline, user *model.User, repo *model.Repo, envs map[string]string, opts RestartOptions) (*model.Pipeline, error) {
 	forge, err := server.Config.Services.Manager.ForgeFromRepo(repo)
 	if err != nil {
 		msg := fmt.Sprintf("failure to load forge for repo '%s'", repo.FullName)
@@ -39,6 +39,19 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 
 	if lastPipeline.Status == model.StatusBlocked {
 		return nil, &ErrBadRequest{Msg: "cannot restart a pipeline with status blocked"}
+	}
+	if opts.partial() && (lastPipeline.Status == model.StatusPending || lastPipeline.Status == model.StatusRunning) {
+		return nil, &ErrBadRequest{Msg: "cannot rerun part of a pipeline that is still running"}
+	}
+	if opts.partial() {
+		// Validate against the previous run first, so a bad selection never creates a pipeline.
+		oldWorkflows, err := store.WorkflowGetTree(lastPipeline)
+		if err != nil {
+			return nil, fmt.Errorf("failure to load workflows of pipeline %d: %w", lastPipeline.Number, err)
+		}
+		if _, err := selectRerun(oldWorkflows, oldWorkflows, opts); err != nil {
+			return nil, err
+		}
 	}
 
 	// The forge fetcher reuses this as-is; a config extension may replace it.
@@ -117,6 +130,17 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 		msg := fmt.Sprintf("failure to createPipelineItems for %s", repo.FullName)
 		log.Error().Err(err).Msg(msg)
 		return nil, errors.New(msg)
+	}
+
+	if opts.partial() {
+		pipelineItems, err = reusePreviousResults(store, lastPipeline, newPipeline, pipelineItems, opts)
+		if err != nil {
+			// The new pipeline already exists, so close it with the reason instead of leaving it pending.
+			if newPipeline, uErr := UpdateToStatusError(store, *newPipeline, err); uErr == nil {
+				updatePipelineStatus(ctx, forge, newPipeline, repo, user)
+			}
+			return nil, err
+		}
 	}
 
 	publishPipeline(ctx, forge, newPipeline, repo, user)
