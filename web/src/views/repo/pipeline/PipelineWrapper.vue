@@ -43,6 +43,7 @@
             />
             <div ref="rerunMenuRoot" class="relative shrink-0">
               <Button
+                class="rerun-toggle"
                 :text="$t('repo.pipeline.actions.rerun')"
                 end-icon="chevron-right"
                 :is-loading="isRerunning"
@@ -62,16 +63,17 @@
                   }}</span>
                 </button>
                 <button
-                  v-if="canRerunPart && hasFailed"
+                  v-if="canRerunPart"
                   type="button"
                   role="menuitem"
                   class="rerun-item"
+                  :disabled="!hasFailed"
                   @click="rerun('failed')"
                 >
                   <span class="font-bold">{{ $t('repo.pipeline.actions.rerun_failed') }}</span>
                   <span class="text-wp-text-alt-100 text-sm">{{ $t('repo.pipeline.actions.rerun_failed_desc') }}</span>
                 </button>
-                <template v-if="canRerunPart && workflowNames.length > 1">
+                <template v-if="canRerunPart && workflowNames.length > 0">
                   <span
                     class="border-wp-background-400 text-wp-text-alt-100 mt-1 border-t px-3 pt-2 pb-1 text-xs font-bold"
                   >
@@ -290,5 +292,14 @@ const goBack = useRouteBack({ name: 'repo' });
 
 .rerun-item {
   @apply hover:bg-wp-control-neutral-200 flex cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2 text-left;
+}
+
+.rerun-item:disabled {
+  @apply cursor-not-allowed opacity-50 hover:bg-transparent;
+}
+
+/* The shared chevron points right; a menu opens downwards. */
+.rerun-toggle :deep(svg:last-of-type) {
+  transform: rotate(90deg);
 }
 </style>
