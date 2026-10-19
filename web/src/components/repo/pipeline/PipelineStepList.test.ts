@@ -16,14 +16,19 @@ const i18n = createI18n({
   messages: { en: {} },
 });
 
-const pipelineConfigs = ref<PipelineConfig[]>([{ hash: 'h', name: 'default', data: '' }]);
+const pipelineConfigs = ref<PipelineConfig[]>([
+  { hash: 'h', name: 'build', data: '' },
+  { hash: 'h2', name: 'e2e', data: '' },
+]);
+const repo = ref({ id: 1 });
+const repoPermissions = ref({ pull: true, push: true, admin: false });
 
 function mountStepList(pipeline: Pipeline) {
   return shallowMount(PipelineStepList, {
     props: { pipeline },
     global: {
       plugins: [i18n],
-      provide: { 'pipeline-configs': pipelineConfigs },
+      provide: { 'pipeline-configs': pipelineConfigs, repo, 'repo-permissions': repoPermissions },
       // router-link resolves globally, so shallowMount does not stub it.
       stubs: { 'router-link': true, RouterLink: true },
     },
@@ -144,5 +149,23 @@ describe('pipelineStepList', () => {
     const pipeline = makePipeline([makeWorkflow(1, undefined, 'skipped'), makeWorkflow(2, [makeStep(1)], 'success')]);
 
     expect(() => mountStepList(pipeline)).not.toThrow();
+  });
+
+  it('offers a rerun button per workflow on a finished pipeline', () => {
+    const pipeline = makePipeline([
+      makeWorkflow(1, [makeStep(1)], 'success'),
+      makeWorkflow(2, [makeStep(2)], 'failure'),
+    ]);
+    const wrapper = mountStepList(pipeline);
+    expect(wrapper.findAllComponents({ name: 'IconButton' })).toHaveLength(2);
+  });
+
+  it('hides the rerun buttons while the pipeline runs', () => {
+    const pipeline = {
+      ...makePipeline([makeWorkflow(1, [makeStep(1)], 'success'), makeWorkflow(2, [makeStep(2)], 'running')]),
+      status: 'running',
+    } as Pipeline;
+    const wrapper = mountStepList(pipeline);
+    expect(wrapper.findAllComponents({ name: 'IconButton' })).toHaveLength(0);
   });
 });

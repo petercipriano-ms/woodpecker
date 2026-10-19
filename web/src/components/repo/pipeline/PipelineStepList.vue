@@ -73,26 +73,35 @@
                 <Badge :label="key" :value="value" />
               </div>
             </div>
-            <button
-              v-if="!singleConfig"
-              type="button"
-              :title="workflow.name"
-              class="hover:bg-wp-control-neutral-200 flex cursor-pointer items-center gap-2 rounded-md px-1 py-2"
-              @click="workflowsCollapsed[workflow.id] = !workflowsCollapsed[workflow.id]"
-            >
-              <Icon
-                name="chevron-right"
-                class="h-6 min-w-6 transition-transform duration-150"
-                :class="{ 'rotate-90 transform': !workflowsCollapsed[workflow.id] }"
+            <div v-if="!singleConfig" class="flex items-center gap-1">
+              <button
+                type="button"
+                :title="workflow.name"
+                class="hover:bg-wp-control-neutral-200 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1 py-2"
+                @click="workflowsCollapsed[workflow.id] = !workflowsCollapsed[workflow.id]"
+              >
+                <Icon
+                  name="chevron-right"
+                  class="h-6 min-w-6 transition-transform duration-150"
+                  :class="{ 'rotate-90 transform': !workflowsCollapsed[workflow.id] }"
+                />
+                <PipelineStatusIcon :status="workflow.state" class="h-4! w-4!" />
+                <span class="truncate">{{ workflow.name }}</span>
+                <PipelineStepDuration
+                  v-if="workflow.started !== workflow.finished"
+                  :workflow="workflow"
+                  class="pr-2px mr-1"
+                />
+              </button>
+              <IconButton
+                v-if="canRerunWorkflow"
+                icon="refresh"
+                class="h-8 w-8 shrink-0"
+                :title="$t('repo.pipeline.actions.rerun_workflow', { name: workflow.name })"
+                :is-loading="isRerunning"
+                @click="rerunPipeline(pipeline.number, workflow.name)"
               />
-              <PipelineStatusIcon :status="workflow.state" class="h-4! w-4!" />
-              <span class="truncate">{{ workflow.name }}</span>
-              <PipelineStepDuration
-                v-if="workflow.started !== workflow.finished"
-                :workflow="workflow"
-                class="pr-2px mr-1"
-              />
-            </button>
+            </div>
           </div>
           <div
             class="transition-height overflow-hidden duration-150"
@@ -128,11 +137,13 @@ import { computed, nextTick, ref, toRef, useTemplateRef, watch } from 'vue';
 
 import Badge from '~/components/atomic/Badge.vue';
 import Icon from '~/components/atomic/Icon.vue';
+import IconButton from '~/components/atomic/IconButton.vue';
 import Panel from '~/components/layout/Panel.vue';
 import PipelineStatusIcon from '~/components/repo/pipeline/PipelineStatusIcon.vue';
 import PipelineStepDuration from '~/components/repo/pipeline/PipelineStepDuration.vue';
 import { requiredInject } from '~/compositions/useInjectProvide';
 import usePipeline from '~/compositions/usePipeline';
+import { useRerunPipeline } from '~/compositions/useRerunPipeline';
 import { StepType } from '~/lib/api/types';
 import type { Pipeline, PipelineStep } from '~/lib/api/types';
 
@@ -149,6 +160,12 @@ const pipeline = toRef(props, 'pipeline');
 const selectedStepId = toRef(props, 'selectedStepId');
 const { prettyRef } = usePipeline(pipeline);
 const pipelineConfigs = requiredInject('pipeline-configs');
+const repoPermissions = requiredInject('repo-permissions');
+const { rerunPipeline, isRerunning } = useRerunPipeline();
+// Rerunning one workflow reuses the others' finished results, so the pipeline must be finished.
+const canRerunWorkflow = computed(
+  () => !!repoPermissions.value?.push && !['pending', 'running', 'blocked'].includes(pipeline.value.status),
+);
 
 const workflowsCollapsed = ref<Record<PipelineStep['id'], boolean>>(
   pipeline.value.workflows && pipeline.value.workflows.length > 1

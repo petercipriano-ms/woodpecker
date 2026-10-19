@@ -41,12 +41,57 @@
               :is-loading="isCancelingPipeline"
               @click="cancelPipeline"
             />
-            <Button
-              class="shrink-0"
-              :text="$t('repo.pipeline.actions.restart')"
-              :is-loading="isRestartingPipeline"
-              @click="restartPipeline"
-            />
+            <div ref="rerunMenuRoot" class="relative shrink-0">
+              <Button
+                :text="$t('repo.pipeline.actions.rerun')"
+                end-icon="chevron-right"
+                :is-loading="isRerunning"
+                aria-haspopup="menu"
+                :aria-expanded="showRerunMenu"
+                @click="showRerunMenu = !showRerunMenu"
+              />
+              <div
+                v-if="showRerunMenu"
+                role="menu"
+                class="border-wp-background-400 bg-wp-background-100 text-wp-text-100 absolute top-full right-0 z-50 mt-1 flex w-80 flex-col rounded-md border p-1 shadow-lg"
+              >
+                <button type="button" role="menuitem" class="rerun-item" @click="rerun()">
+                  <span class="font-bold">{{ $t('repo.pipeline.actions.rerun_from_start') }}</span>
+                  <span class="text-wp-text-alt-100 text-sm">{{
+                    $t('repo.pipeline.actions.rerun_from_start_desc')
+                  }}</span>
+                </button>
+                <button
+                  v-if="canRerunPart && hasFailed"
+                  type="button"
+                  role="menuitem"
+                  class="rerun-item"
+                  @click="rerun('failed')"
+                >
+                  <span class="font-bold">{{ $t('repo.pipeline.actions.rerun_failed') }}</span>
+                  <span class="text-wp-text-alt-100 text-sm">{{ $t('repo.pipeline.actions.rerun_failed_desc') }}</span>
+                </button>
+                <template v-if="canRerunPart && workflowNames.length > 1">
+                  <span
+                    class="border-wp-background-400 text-wp-text-alt-100 mt-1 border-t px-3 pt-2 pb-1 text-xs font-bold"
+                  >
+                    {{ $t('repo.pipeline.actions.rerun_job') }}
+                  </span>
+                  <button
+                    v-for="workflow in pipeline.workflows"
+                    :key="workflow.id"
+                    type="button"
+                    role="menuitem"
+                    class="rerun-item flex-row! items-center gap-2"
+                    :title="$t('repo.pipeline.actions.rerun_workflow', { name: workflow.name })"
+                    @click="rerun(workflow.name)"
+                  >
+                    <PipelineStatusIcon :status="workflow.state" class="h-4! w-4!" />
+                    <span class="truncate">{{ workflow.name }}</span>
+                  </button>
+                </template>
+              </div>
+            </div>
             <Button
               v-if="pipeline.status === 'success' && repo.allow_deploy"
               class="shrink-0"
@@ -128,10 +173,11 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onMounted, ref, toRef, watch } from 'vue';
+import { onClickOutside, onKeyStroke } from '@vueuse/core';
+import { computed, onMounted, ref, toRef, useTemplateRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
 import Button from '~/components/atomic/Button.vue';
 import Icon from '~/components/atomic/Icon.vue';
@@ -147,6 +193,7 @@ import { useFavicon } from '~/compositions/useFavicon';
 import { provide, requiredInject } from '~/compositions/useInjectProvide';
 import useNotifications from '~/compositions/useNotifications';
 import usePipeline from '~/compositions/usePipeline';
+import { useRerunPipeline } from '~/compositions/useRerunPipeline';
 import { useRouteBack } from '~/compositions/useRouteBack';
 import type { Pipeline, PipelineConfig } from '~/lib/api/types';
 import { pipelineHasErrorsToShow, workflowsWithErrors } from '~/lib/pipeline';
@@ -159,7 +206,6 @@ const props = defineProps<{
 
 const apiClient = useApiClient();
 const route = useRoute();
-const router = useRouter();
 const notifications = useNotifications();
 const favicon = useFavicon();
 const i18n = useI18n();
@@ -212,19 +258,37 @@ const { doSubmit: cancelPipeline, isLoading: isCancelingPipeline } = useAsyncAct
   notifications.notify({ title: i18n.t('repo.pipeline.actions.cancel_success'), type: 'success' });
 });
 
-const { doSubmit: restartPipeline, isLoading: isRestartingPipeline } = useAsyncAction(async () => {
-  const newPipeline = await apiClient.restartPipeline(repo.value.id, pipelineId.value, {
-    fork: true,
-  });
-  notifications.notify({ title: i18n.t('repo.pipeline.actions.restart_success'), type: 'success' });
-  await router.push({
-    name: 'repo-pipeline',
-    params: { pipelineId: newPipeline.number },
-  });
+const { rerunPipeline, isRerunning } = useRerunPipeline();
+const showRerunMenu = ref(false);
+const rerunMenuRoot = useTemplateRef<HTMLElement>('rerunMenuRoot');
+onClickOutside(rerunMenuRoot, () => {
+  showRerunMenu.value = false;
 });
+onKeyStroke('Escape', () => {
+  showRerunMenu.value = false;
+});
+// Partial reruns reuse finished results, so they need a finished pipeline.
+const canRerunPart = computed(() => !['pending', 'running', 'blocked'].includes(pipeline.value?.status ?? ''));
+const hasFailed = computed(() =>
+  (pipeline.value?.workflows ?? []).some((w) => !['success', 'skipped'].includes(w.state)),
+);
+const workflowNames = computed(() => [...new Set((pipeline.value?.workflows ?? []).map((w) => w.name))]);
+
+async function rerun(selection?: string) {
+  showRerunMenu.value = false;
+  await rerunPipeline(pipelineId.value, selection);
+}
 
 onMounted(loadPipeline);
 watch([repositoryId, pipelineId], loadPipeline);
 
 const goBack = useRouteBack({ name: 'repo' });
 </script>
+
+<style scoped>
+@reference '~/tailwind.css';
+
+.rerun-item {
+  @apply hover:bg-wp-control-neutral-200 flex cursor-pointer flex-col gap-0.5 rounded-md px-3 py-2 text-left;
+}
+</style>
