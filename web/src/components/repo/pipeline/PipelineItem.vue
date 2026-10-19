@@ -28,6 +28,13 @@
         <span class="md:display-unset text-wp-text-alt-100 hidden">#{{ pipeline.number }}</span>
         <!-- eslint-disable-next-line @intlify/vue-i18n/no-raw-text -->
         <span class="md:display-unset text-wp-text-alt-100 mx-2 hidden">-</span>
+        <span
+          v-if="rerun"
+          class="bg-wp-background-300 text-wp-text-alt-100 mr-2 flex shrink-0 items-center gap-1 rounded-md px-1.5 text-xs"
+        >
+          <Icon name="refresh" class="h-3! w-3!" />
+          {{ rerun }}
+        </span>
         <RenderMarkdown
           class="text-wp-text-100 overflow-hidden text-ellipsis whitespace-nowrap underline md:no-underline"
           :title="message"
@@ -90,12 +97,14 @@ import PipelineStatusIcon from '~/components/repo/pipeline/PipelineStatusIcon.vu
 import { useDate } from '~/compositions/useDate';
 import usePipeline from '~/compositions/usePipeline';
 import type { Pipeline } from '~/lib/api/types';
+import { rerunLabel } from '~/lib/pipeline-reruns';
 
 const props = defineProps<{
   pipeline: Pipeline;
 }>();
 
 const { t } = useI18n();
+const rerun = computed(() => rerunLabel(props.pipeline, t));
 const { durationAsNumber } = useDate();
 
 const pipeline = toRef(props, 'pipeline');

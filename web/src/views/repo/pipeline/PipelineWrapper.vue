@@ -22,6 +22,21 @@
         <div class="flex min-w-0 content-start gap-2">
           <PipelineStatusIcon :status="pipeline.status" class="flex shrink-0" />
           <span class="shrink-0 text-center">{{ $t('repo.pipeline.pipeline', { pipelineId }) }}</span>
+          <router-link
+            v-if="rerunInfo"
+            :to="{ name: 'repo-pipeline', params: { pipelineId: pipeline.parent } }"
+            class="bg-wp-background-300 text-wp-text-alt-100 flex shrink-0 items-center gap-1 rounded-md px-1.5 text-xs hover:underline"
+          >
+            <Icon name="refresh" class="h-3! w-3!" />
+            {{ rerunInfo }}
+          </router-link>
+          <router-link
+            v-if="latestRerun"
+            :to="{ name: 'repo-pipeline', params: { pipelineId: latestRerun.number } }"
+            class="bg-wp-background-300 text-wp-text-alt-100 flex shrink-0 items-center gap-1 rounded-md px-1.5 text-xs hover:underline"
+          >
+            {{ $t('repo.pipeline.latest_rerun', { number: latestRerun.number }) }}
+          </router-link>
           <!-- eslint-disable-next-line @intlify/vue-i18n/no-raw-text -->
           <span class="hidden md:inline-block">-</span>
           <RenderMarkdown
@@ -199,6 +214,7 @@ import { useRerunPipeline } from '~/compositions/useRerunPipeline';
 import { useRouteBack } from '~/compositions/useRouteBack';
 import type { Pipeline, PipelineConfig } from '~/lib/api/types';
 import { pipelineHasErrorsToShow, workflowsWithErrors } from '~/lib/pipeline';
+import { rerunLabel } from '~/lib/pipeline-reruns';
 import { usePipelineStore } from '~/store/pipelines';
 
 const props = defineProps<{
@@ -274,6 +290,26 @@ const canRerunPart = computed(() => !['pending', 'running', 'blocked'].includes(
 const hasFailed = computed(() =>
   (pipeline.value?.workflows ?? []).some((w) => !['success', 'skipped'].includes(w.state)),
 );
+const rerunInfo = computed(() => (pipeline.value ? rerunLabel(pipeline.value, i18n.t) : undefined));
+// Newest pipeline in this pipeline's rerun chain, among the pipelines already loaded for the repo.
+const repoPipelines = pipelineStore.getRepoPipelines(repositoryId);
+const latestRerun = computed(() => {
+  const number = pipeline.value?.number;
+  if (!number) {
+    return undefined;
+  }
+  const byNumber = new Map(repoPipelines.value.map((p) => [p.number, p]));
+  const descendsFromThis = (p: Pipeline) => {
+    for (let parent = p.parent, hops = 0; parent > 0 && hops < 100; hops++) {
+      if (parent === number) {
+        return true;
+      }
+      parent = byNumber.get(parent)?.parent ?? 0;
+    }
+    return false;
+  };
+  return repoPipelines.value.filter(descendsFromThis).sort((a, b) => b.number - a.number)[0];
+});
 const workflowNames = computed(() => [...new Set((pipeline.value?.workflows ?? []).map((w) => w.name))]);
 
 async function rerun(selection?: string) {

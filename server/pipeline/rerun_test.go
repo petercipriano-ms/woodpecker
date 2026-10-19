@@ -158,3 +158,10 @@ func TestReusePreviousResults(t *testing.T) {
 	assert.Equal(t, int64(19), newBuild.Children[0].Finished)
 	assert.Equal(t, model.StatusPending, newE2E.State)
 }
+
+func TestRestartOptionsMode(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "start", RestartOptions{}.mode())
+	assert.Equal(t, "failed", RestartOptions{Rerun: []string{RerunFailed}}.mode())
+	assert.Equal(t, "build,e2e", RestartOptions{Rerun: []string{"build", "e2e"}}.mode())
+}

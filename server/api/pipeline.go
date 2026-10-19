@@ -606,6 +606,9 @@ func PostPipeline(c *gin.Context) {
 
 	// rerun=failed reruns what did not succeed; rerun=<workflow> (repeatable) reruns those workflows. Dependents always rerun.
 	opts := pipeline.RestartOptions{Rerun: c.QueryArray("rerun")}
+	if clicker := session.User(c); clicker != nil {
+		opts.By = clicker.Login
+	}
 
 	newPipeline, err := pipeline.Restart(c, _store, pl, user, repo, envs, opts)
 	if err != nil {

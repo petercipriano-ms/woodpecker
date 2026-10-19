@@ -78,6 +78,8 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 	newPipeline := createNewOutOfOld(lastPipeline)
 	newPipeline.Parent = lastPipeline.Number
 	newPipeline.RerunCount++
+	newPipeline.RerunMode = opts.mode()
+	newPipeline.RerunBy = opts.By
 	newPipeline.Version = version.String()
 
 	err = store.CreatePipeline(newPipeline)

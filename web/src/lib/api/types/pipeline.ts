@@ -22,6 +22,9 @@ export interface Pipeline {
   number: number;
 
   parent: number;
+  // Set on reruns: "start", "failed" or the workflows rerun, and who started it.
+  rerun_mode?: string;
+  rerun_by?: string;
 
   event: WebhookEvents;
 

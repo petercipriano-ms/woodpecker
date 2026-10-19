@@ -41,6 +41,8 @@ type Pipeline struct {
 	Commit               string                  `json:"commit"                  xorm:"commit"`
 	Branch               string                  `json:"branch"                  xorm:"branch"`
 	RerunCount           int64                   `json:"rerun_count"             xorm:"rerun_count"`
+	RerunMode            string                  `json:"rerun_mode,omitempty"    xorm:"rerun_mode"` // "start", "failed" or the workflows rerun; empty if not a rerun
+	RerunBy              string                  `json:"rerun_by,omitempty"      xorm:"rerun_by"`   // login of the user who started the rerun
 	Ref                  string                  `json:"ref"                     xorm:"ref"`
 	Refspec              string                  `json:"refspec"                 xorm:"refspec"`
 	Avatar               string                  `json:"author_avatar"           xorm:"varchar(500) avatar"` // TODO: only & rename to AuthorAvatar // Avatar URL of the author of the commit

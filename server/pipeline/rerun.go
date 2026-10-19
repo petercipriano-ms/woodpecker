@@ -17,6 +17,7 @@ package pipeline
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 
@@ -35,9 +36,19 @@ const RerunFailed = "failed"
 type RestartOptions struct {
 	// Rerun holds RerunFailed, or the names of the workflows to run again.
 	Rerun []string
+	// By is the login of the user who asked for the rerun, shown on the new pipeline.
+	By string
 }
 
 func (o RestartOptions) partial() bool { return len(o.Rerun) > 0 }
+
+// mode is what the new pipeline records as RerunMode.
+func (o RestartOptions) mode() string {
+	if !o.partial() {
+		return "start"
+	}
+	return strings.Join(o.Rerun, ",")
+}
 
 type workflowKey struct {
 	name string
